@@ -14,7 +14,7 @@ from .serializers import (
     ServiceCardIndividualSerializer,
     ServiceCardGroupSerializer,
     ReviewIndividualSerializer,
-    ReviewGroupSerializers,
+    ReviewGroupSerializer,
 )
 from rest_framework.response import Response
 from django.contrib.auth.models import User
@@ -221,7 +221,7 @@ class ReviewIndividualViewSet(viewsets.ModelViewSet):
 
 class ReviewGroupViewSet(viewsets.ModelViewSet):
     queryset = ReviewGroup.objects.all()
-    serializer_class = ReviewGroupSerializers
+    serializer_class = ReviewGroupSerializer
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)

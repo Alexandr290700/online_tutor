@@ -9,4 +9,6 @@ __idea__/
 
 .env
 
+requirements.txt
+
 *.pyc

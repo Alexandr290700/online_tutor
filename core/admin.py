@@ -16,7 +16,6 @@ class SpecialistAdmin(admin.ModelAdmin):
         "education",
         "consultation_price",
         "instagram",
-        "facebook",
     )
     list_display_links = (
         "user",
@@ -29,8 +28,6 @@ class SpecialistAdmin(admin.ModelAdmin):
         "rating",
         "education",
         "consultation_price",
-        "instagram",
-        "facebook",
     )
     list_filter = (
         "id",

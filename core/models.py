@@ -32,7 +32,6 @@ class Specialist(models.Model):
         verbose_name="Стоимость почасовой консультации",
     )
     instagram = models.TextField(blank=True)
-    facebook = models.TextField(blank=True)
 
     class Meta:
         verbose_name = "Репетитор"

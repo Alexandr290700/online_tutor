@@ -78,7 +78,7 @@ class ReviewIndividualSerializer(serializers.ModelSerializer):
         )
 
 
-class ReviewGroupSerializers(serializers.ModelSerializer):
+class ReviewGroupSerializer(serializers.ModelSerializer):
     completed_by = serializers.PrimaryKeyRelatedField(
         queryset=Student.objects.all(), required=True
     )
