@@ -1,5 +1,16 @@
 from django.contrib import admin
-from .models import Specialist, Student, ServiceCardIndividual, ServiceCardGroup
+from .models import Specialist, Student, ServiceCardIndividual, ServiceCardGroup, CustomUser
+
+
+@admin.register(CustomUser)
+class CustomUserAdmin(admin.ModelAdmin):
+    list_display = ("get_full_name", "email", "user_type", "created", "updated")
+    search_fields = (
+        "get_full_name",
+        "email",
+    )
+    list_filter = ("user_type",)
+
 
 
 @admin.register(Specialist)
