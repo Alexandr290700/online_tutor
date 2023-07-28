@@ -1,26 +1,29 @@
 from django.urls import path
-from rest_framework_simplejwt.views import TokenRefreshView
+from rest_framework_simplejwt.views import TokenRefreshView, TokenVerifyView
 from .views import (
     SpecialistViewSet,
     StudentViewSet,
     ServiceCardIndividualViewSet,
     ServiceCardGroupViewSet,
     LogoutAPIView,
-    RegisterView,
-    activate_view,
+    RegistrationView,
     LoginAPIView,
+    ReviewIndividualViewSet,
+    ReviewGroupViewSet,
+    activate_view,
+    PaymentAPIView,
 )
 
 
 urlpatterns = [
-    path("register/", RegisterView.as_view(), name="register"),
+    path("register/", RegistrationView.as_view(), name="register"),
     path(
         "activate/<str:activation_code>/", activate_view, name="activate-email"
     ),
     path("login/", LoginAPIView.as_view(), name="login"),
     path("logout/", LogoutAPIView.as_view(), name="logout"),
     path("token/refresh/", TokenRefreshView.as_view(), name="token-refresh"),
-
+    path("payment/", PaymentAPIView.as_view(), name="payment"),
     path(
         "specialist/",
         SpecialistViewSet.as_view({"get": "list", "post": "create"}),
@@ -78,5 +81,29 @@ urlpatterns = [
         "api/service_card_group/<int:pk>/mark_completed/",
         ServiceCardGroupViewSet.as_view({"patch": "mark_completed"}),
         name="mark_completed_group",
+    ),
+    path(
+        "review_individual/",
+        ReviewIndividualViewSet.as_view({"get": "list", "post": "create"}),
+        name="review_individual_list_create",
+    ),
+    path(
+        "review_individual/<int:pk>/",
+        ReviewIndividualViewSet.as_view(
+            {"get": "retrieve", "put": "update", "delete": "destroy"}
+        ),
+        name="review_individual_detail",
+    ),
+    path(
+        "review_group/",
+        ReviewGroupViewSet.as_view({"get": "list", "post": "create"}),
+        name="review_group_list_create",
+    ),
+    path(
+        "review_group/<int:pk>/",
+        ReviewGroupViewSet.as_view(
+            {"get": "retrieve", "put": "update", "delete": "destroy"}
+        ),
+        name="review_group_detail",
     ),
 ]

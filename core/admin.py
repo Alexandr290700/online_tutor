@@ -1,16 +1,21 @@
 from django.contrib import admin
-from .models import Specialist, Student, ServiceCardIndividual, ServiceCardGroup, CustomUser
+from .models import (
+    Specialist,
+    Student,
+    ServiceCardIndividual,
+    ServiceCardGroup,
+    Account,
+)
 
 
-@admin.register(CustomUser)
-class CustomUserAdmin(admin.ModelAdmin):
+@admin.register(Account)
+class AccountRegisterAdmin(admin.ModelAdmin):
     list_display = ("get_full_name", "email", "user_type", "created", "updated")
     search_fields = (
         "get_full_name",
         "email",
     )
     list_filter = ("user_type",)
-
 
 
 @admin.register(Specialist)
@@ -92,6 +97,7 @@ class ServieCardIndividualAdmin(admin.ModelAdmin):
         "specialist",
         "price",
         "completed",
+        "completed_by",
     )
     list_display_links = (
         "id",
@@ -107,6 +113,6 @@ class ServieCardIndividualAdmin(admin.ModelAdmin):
 
 @admin.register(ServiceCardGroup)
 class ServiceCardGroup(admin.ModelAdmin):
-    list_display = ("name", "image", "date", "specialist", "price", "completed")
+    list_display = ("name", "image", "date", "specialist", "price", "completed", "completed_by")
     list_display_links = ("name", "date", "specialist", "price", "completed")
     list_filter = ("id", "name", "date", "price", "completed")

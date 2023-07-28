@@ -6,7 +6,7 @@ STUDENT: str = "Студент"
 ADMIN: str = "Админ"
 
 
-class CustomUserManager(BaseUserManager):
+class MyAccountManager(BaseUserManager):
     use_in_migrations = True
 
     def _create_user(self, email, password, **extra_fields):

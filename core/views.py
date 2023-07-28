@@ -1,5 +1,6 @@
 import django_filters
-from rest_framework import viewsets, filters, status
+import stripe
+from rest_framework import viewsets, filters, status, generics
 from .models import (
     Specialist,
     Student,
@@ -7,7 +8,7 @@ from .models import (
     ServiceCardGroup,
     ReviewIndividual,
     ReviewGroup,
-    CustomUser
+    Account,
 )
 from .serializers import (
     SpecialistSerializer,
@@ -16,8 +17,10 @@ from .serializers import (
     ServiceCardGroupSerializer,
     ReviewIndividualSerializer,
     ReviewGroupSerializer,
-    RegisterCustomUserSerializers,
+    AccountSerializer,
     LoginUserSerializer,
+    LogoutUserSerializer,
+    PaymentSerializer
 )
 from django.contrib.sites.shortcuts import get_current_site
 from django.shortcuts import get_object_or_404, redirect
@@ -29,13 +32,17 @@ from rest_framework.decorators import api_view
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from .tasks import send_activation_code
+from django.conf import settings
 
 
-class RegisterView(APIView):
-    serializer_class = RegisterCustomUserSerializers
+stripe.api_key = settings.STRIPE_SECRET_KEY
+
+
+class RegistrationView(APIView):
+    serializer_class = AccountSerializer
 
     @swagger_auto_schema(
-        request_body=RegisterCustomUserSerializers,
+        request_body=AccountSerializer,
         operation_summary="Регистрация пользователя",
     )
     def post(self, request):
@@ -44,8 +51,8 @@ class RegisterView(APIView):
         serializer.save()
         email = serializer.data.get("email")
 
-        if CustomUser.objects.filter(email=email).exists():
-            user = CustomUser.objects.get(email=email)
+        if Account.objects.filter(email=email).exists():
+            user = Account.objects.get(email=email)
             current_site = get_current_site(request=request).domain
             relative_link = reverse(
                 "activate-email",
@@ -63,16 +70,20 @@ class RegisterView(APIView):
 
 
 @swagger_auto_schema(
-    method="GET",
+    method="POST",
     operation_summary="Запрос для активации аккаунта",
 )
-@api_view(["GET"])
+@api_view(["POST"])
 def activate_view(request, activation_code):
-    user = get_object_or_404(CustomUser, activation_code=activation_code)
-    user.is_active = True  # делаем активым
-    user.activation_code = ""  # удаляем активационный код
-    user.save()
-    return redirect("login")
+    if request.method == "POST":
+        user = get_object_or_404(Account, activation_code=activation_code)
+        user.is_active = True
+        user.activation_code = ""
+        user.save()
+        return redirect("login")
+    else:
+        return Response({"detail": "Method not allowed."}, status=405)
+    
 
 
 class LoginAPIView(APIView):
@@ -88,8 +99,9 @@ class LoginAPIView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-class LogoutAPIView(APIView):
+class LogoutAPIView(generics.GenericAPIView):
     permission_classes = [IsAuthenticated]
+    serializer_class = LogoutUserSerializer
 
     @swagger_auto_schema(
         operation_summary="Выход пользователя из системы.",
@@ -107,8 +119,6 @@ class LogoutAPIView(APIView):
             )
 
 
-
-
 class SpecialistViewSet(viewsets.ModelViewSet):
     queryset = Specialist.objects.all()
     serializer_class = SpecialistSerializer
@@ -117,19 +127,6 @@ class SpecialistViewSet(viewsets.ModelViewSet):
         filters.OrderingFilter,
         django_filters.rest_framework.DjangoFilterBackend,
     )
-
-    # def create(self, request, *args, **kwargs):
-    #     serializer = self.get_serializer(data=request.data)
-    #     if serializer.is_valid():
-    #         user = User.objects.create_user(
-    #             username=request.data["username"],
-    #             password=request.data["password"],
-    #             email=request.data["email"],
-    #         )
-    #         serializer.save(user=user)
-    #         return Response({"success": "Регистрация прошла успешно!"})
-    #     else:
-    #         return Response(serializer.errors, status=400)
 
 
 class StudentViewSet(viewsets.ModelViewSet):
@@ -140,19 +137,6 @@ class StudentViewSet(viewsets.ModelViewSet):
         filters.OrderingFilter,
         django_filters.rest_framework.DjangoFilterBackend,
     )
-
-    # def create(self, request, *args, **kwargs):
-    #     serializer = self.get_serializer(data=request.data)
-    #     if serializer.is_valid():
-    #         user = User.objects.create_user(
-    #             username=request.data["username"],
-    #             password=request.data["password"],
-    #             email=request.data["email"],
-    #         )
-    #         serializer.save(user=user)
-    #         return Response({"success": "Регистрация прошла успешно!"})
-    #     else:
-    #         return Response(serializer.errors, status=400)
 
 
 class ServiceCardIndividualViewSet(viewsets.ModelViewSet):
@@ -178,7 +162,7 @@ class ServiceCardIndividualViewSet(viewsets.ModelViewSet):
         # Проверяем является ли юзер репетитором
         if card.specialist.user == request.user:
             card.completed = True
-            card.completed_by = card.specialist
+            card.completed_by_id = card.specialist
             card.save()
             return Response({"message": "Курс отмечен как завершенный."})
         else:
@@ -241,7 +225,7 @@ class ServiceCardGroupViewSet(viewsets.ModelViewSet):
         # Проверяем является ли юзер репетитором
         if card.specialist.user == request.user:
             card.completed = True
-            card.completed_by = card.specialist
+            card.completed_by_id = card.specialist
             card.save()
             return Response({"message": "Курс отмечен как завершенный."})
         else:
@@ -290,22 +274,25 @@ class ReviewIndividualViewSet(viewsets.ModelViewSet):
         serializer.is_valid()
 
         # Проверяем является ли ученик оставляющий отзыв, учеником который прошел курс
-        student = serializer.validated_data["completed_by"]
-        service_card = serializer.validated_data["service_card"]
-        if not service_card.specialist.student_set.filter(
-            id=student.id
-        ).exist():
+        try:
+            student = serializer.validated_data["completed_by"]
+            service_card = serializer.validated_data["service_card"]
+            if not service_card.specialist.student_set.filter(
+                id=student.id
+            ).exist():
+                return Response(
+                    {
+                        "detail": "Вы не можете оставлять отзыв для этого курса, так как не проходили соотвутствующий курс"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            self.perform_create(serializer)
+            headers = self.get_success_headers(serializer.data)
             return Response(
-                {
-                    "detail": "Вы не можете оставлять отзыв для этого курса, так как не проходили соотвутствующий курс"
-                },
-                status=status.HTTP_400_BAD_REQUEST,
+                serializer.data, status=status.HTTP_201_CREATED, headers=headers
             )
-        self.perform_create(serializer)
-        headers = self.get_success_headers(serializer.data)
-        return Response(
-            serializer.data, status=status.HTTP_201_CREATED, headers=headers
-        )
+        except KeyError:
+            return Response({"error": "Вы не прошли курс"})
 
 
 class ReviewGroupViewSet(viewsets.ModelViewSet):
@@ -318,7 +305,7 @@ class ReviewGroupViewSet(viewsets.ModelViewSet):
 
         # Проверяем является ли ученик оставляющий отзыв, учеником который прошел курс
         student = serializer.validated_data["completed_by"]
-        service_card = serializer.validated_data["service_card"]
+        service_card = serializer.validated_data["service_card_group"]
         if not service_card.specialist.student_set.filter(
             id=student.id
         ).exist():
@@ -333,3 +320,43 @@ class ReviewGroupViewSet(viewsets.ModelViewSet):
         return Response(
             serializer.data, status=status.HTTP_201_CREATED, headers=headers
         )
+    
+
+class PaymentAPIView(APIView):
+    serializer_class = PaymentSerializer
+    @swagger_auto_schema(
+            request_body=PaymentSerializer
+    )
+    def post(self, request, *args, **kwargs):
+        serializer = self.serializer_class(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        card_data = serializer.validated_data
+
+        payment_method = card_data['payment_method']
+
+        if payment_method == "credit_card":
+            amount=card_data['amount']
+            currency=card_data['currency']
+            description = card_data['description']
+            payment_method = card_data['payment_method']
+
+            try:
+                # Создаем платеж с помощью Stripe
+                intent = stripe.PaymentIntent.create(
+                    amount=amount,
+                    currency=currency,
+                    description=description,
+                    payment_method=payment_method,
+                    confirm=True,
+                )
+
+                # Проверяем прошел ли платеж
+                if intent.status == 'succeeded':
+                    return Response({"message": "Платеж успешно совершен."}, status=status.HTTP_200_OK)
+                else:
+                    return Response({"error": "Платеж откланен"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            except stripe.error.StripeError as e:
+                return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            return Response({"error": "Некорректный метод оплаты"}, status=status.HTTP_400_BAD_REQUEST)

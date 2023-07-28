@@ -6,20 +6,21 @@ from .models import (
     ServiceCardGroup,
     ReviewIndividual,
     ReviewGroup,
-    CustomUser,
+    Account,
 )
 from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.validators import UniqueValidator
+from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 
 
-class RegisterCustomUserSerializers(serializers.ModelSerializer):
+class AccountSerializer(serializers.ModelSerializer):
     """Регистрация пользователя"""
 
     email = serializers.EmailField(
         required=True,
-        validators=[UniqueValidator(queryset=CustomUser.objects.all())],
+        validators=[UniqueValidator(queryset=Account.objects.all())],
     )
     password = serializers.CharField(
         write_only=True,
@@ -33,7 +34,7 @@ class RegisterCustomUserSerializers(serializers.ModelSerializer):
     )
 
     class Meta:
-        model = CustomUser
+        model = Account
         fields = (
             "first_name",
             "last_name",
@@ -57,7 +58,7 @@ class RegisterCustomUserSerializers(serializers.ModelSerializer):
         return data
 
     def validate_email(self, email):
-        if CustomUser.objects.filter(email=email).exists():
+        if Account.objects.filter(email=email).exists():
             raise serializers.ValidationError(
                 "User with this email already exists"
             )
@@ -65,11 +66,11 @@ class RegisterCustomUserSerializers(serializers.ModelSerializer):
 
     def create(self, validated_data):
         if validated_data["user_type"] == "Репетитор":
-            user = CustomUser.objects.create_tutor(**validated_data)
+            user = Account.objects.create_tutor(**validated_data)
         if validated_data["user_type"] == "Студент":
-            user = CustomUser.objects.create_user(**validated_data)
+            user = Account.objects.create_user(**validated_data)
         if validated_data["user_type"] == "Админ":
-            user = CustomUser.objects.create_superuser(**validated_data)
+            user = Account.objects.create_superuser(**validated_data)
         return user
 
 
@@ -84,15 +85,16 @@ class LoginUserSerializer(serializers.ModelSerializer):
     tokens = serializers.SerializerMethodField()
 
     class Meta:
-        model = CustomUser
+        model = Account
         fields = ("email", "password", "tokens")
 
     def get_tokens(self, instance):
-        user = CustomUser.objects.get(email=instance["email"])
+        user = Account.objects.get(email=instance["email"])
         return {
             "refresh": user.tokens()["refresh"],
             "access": user.tokens()["access"],
         }
+    
 
     def validate(self, data):
         email = data["email"]
@@ -108,6 +110,12 @@ class LoginUserSerializer(serializers.ModelSerializer):
 
         return {"email": user.email, "tokens": user.tokens}
 
+class LogoutUserSerializer(serializers.ModelSerializer):
+    detail = serializers.CharField(default="Пользователь успешно вышел из системы.")
+
+    class Meta:
+        model = Account
+        fields = ['detail']
 
 
 class SpecialistSerializer(serializers.ModelSerializer):
@@ -124,7 +132,7 @@ class StudentSerializer(serializers.ModelSerializer):
 
 class ServiceCardIndividualSerializer(serializers.ModelSerializer):
     specialist_name = serializers.CharField(
-        source="specialist.user.username", read_only=True
+        source="specialist.user.last_name", read_only=True
     )
     rating = serializers.FloatField(source="specialist.rating", read_only=True)
 
@@ -145,7 +153,7 @@ class ServiceCardIndividualSerializer(serializers.ModelSerializer):
 
 class ServiceCardGroupSerializer(serializers.ModelSerializer):
     specialist_name = serializers.CharField(
-        source="specialist.user.username", read_only=True
+        source="specialist.user.last_name", read_only=True
     )
     rating = serializers.FloatField(source="specialist.rating", read_only=True)
 
@@ -188,7 +196,24 @@ class ReviewGroupSerializer(serializers.ModelSerializer):
         model = ReviewGroup
         fields = (
             "id",
-            "service_card",
+            "service_card_group",
             "rating",
             "completed_by",
         )
+
+
+class PaymentSerializer(serializers.Serializer):
+    amount = serializers.DecimalField(max_digits=10, decimal_places=2)
+    currency = serializers.CharField(max_length=3)
+    description = serializers.CharField(max_length=255)
+    payment_method = serializers.ChoiceField(choices=[("credit_card", "Credit Card")])
+
+    class Meta:
+        fields = ('amount', 'currency', 'description', 'payment_method', )
+
+    def validate_currency(self, value):
+        # Проверка на поддерживаемую валюту
+        supported_currencies = ["usd", "eur", "kgs"]
+        if value.lower() not in supported_currencies:
+            raise serializers.ValidationError("Неподдерживаемая валюта. Допустимы: USD, EUR, KGS")
+        return value.lower()

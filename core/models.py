@@ -17,7 +17,7 @@ phone_validator = RegexValidator(
 )
 
 
-class CustomUser(AbstractBaseUser, PermissionsMixin):
+class Account(AbstractBaseUser, PermissionsMixin):
     ROLE_CHOICES = (
         (TUTOR, "Репетитор"),
         (STUDENT, "Студент"),
@@ -58,7 +58,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
 
     activation_code = models.CharField(max_length=17, blank=True, null=True)
 
-    objects = CustomUserManager()
+    objects = MyAccountManager()
 
     USERNAME_FIELD = "email"
     EMAIL_FIELD = "email"
@@ -94,7 +94,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
 
 
 class UserProfileBase(models.Model):
-    user = models.OneToOneField(to=CustomUser, on_delete=models.CASCADE)
+    user = models.OneToOneField(Account, on_delete=models.CASCADE)
     profile_picture = models.ImageField(
         upload_to="profile_pics/", blank=True, null=True
     )
@@ -105,9 +105,8 @@ class UserProfileBase(models.Model):
         abstract = True
 
 
-
 class Specialist(models.Model):
-    user = models.OneToOneField(CustomUser, on_delete=models.CASCADE)
+    user = models.OneToOneField(Account, on_delete=models.CASCADE)
     first_name = models.CharField(max_length=100, verbose_name="Имя")
     last_name = models.CharField(max_length=100, verbose_name="Фамилия")
     age = models.PositiveIntegerField(verbose_name="Возраст")
@@ -137,7 +136,7 @@ class Specialist(models.Model):
 
 
 class Student(models.Model):
-    user = models.OneToOneField(CustomUser, on_delete=models.CASCADE)
+    user = models.OneToOneField(Account, on_delete=models.CASCADE)
     first_name = models.CharField(max_length=100, verbose_name="Имя")
     last_name = models.CharField(max_length=100, verbose_name="Фамилия")
     phone = models.CharField(
